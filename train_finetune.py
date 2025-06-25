@@ -141,6 +141,24 @@ def make_subset_loader(dataset: Dataset, indices: List[int], batch_size: int,
     )
 
 
+def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device: torch.device, dl_val: DataLoader) -> None:
+    model = init_model(args.model_size, device)
+    crit = nn.CrossEntropyLoss()
+    opt = optim.AdamW(model.parameters(), lr=args.lr)
+    scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
+
+    for ep in range(1, args.epochs + 1):
+        train_loss = train_epoch(
+            loader, model, crit, opt, scaler, device, args.accum_steps
+        )
+        val_loss = evaluate(dl_val, model, crit, device)
+        val_acc = evaluate_accuracy(model, dl_val, device)
+        print(
+            f"[{tag} epoch {ep}] train {train_loss:.4f} | "
+            f"val {val_loss:.4f} | acc {val_acc:.3%}"
+        )
+
+
 def get_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Finetune GPT-2 using coresets")
     p.add_argument("--model-size", default="124M",
@@ -162,6 +180,8 @@ def get_args() -> argparse.Namespace:
                    help="Pilot fraction for sensitivity coreset")
     p.add_argument("--max-num-batches", type=int, default=None,
                    help="Optional limit for number of batches")
+    p.add_argument("--coreset-type", choices=["uniform", "sensitivity", "all"], default="all",
+                   help="Which coreset strategy to use")
     return p.parse_args()
 
 
@@ -195,51 +215,46 @@ def main(args: argparse.Namespace) -> None:
         pin_memory=device.type == "cuda",
     )
 
-    # Uniform coreset
-    uniform = UniformRandomCoreset(dset_train, fraction=args.coreset_fraction)
-    uniform_idx, _ = uniform.select_coreset()
-    dl_uniform = make_subset_loader(
-        dset_train, uniform_idx, args.bsz, args.workers, collate_fn, device
-    )
+    if args.coreset_type == "uniform":
+        # Uniform coreset
+        uniform = UniformRandomCoreset(dset_train, fraction=args.coreset_fraction)
+        uniform_idx, _ = uniform.select_coreset()
+        dl_uniform = make_subset_loader(
+            dset_train, uniform_idx, args.bsz, args.workers, collate_fn, device
+        )
+        print("\n== Training with UniformRandomCoreset ==")
+        run_training("uniform", dl_uniform, args, device, dl_val)
 
-    # Sensitivity coreset
-    sens_model = init_model(args.model_size, device)
-    sens = SensitivityCoreset(
-        dataset=dset_train,
-        coreset_fraction=args.coreset_fraction,
-        k_clusters_fraction=args.k_clusters_fraction,
-        pilot_fraction=args.pilot_fraction,
-        model=sens_model,
-        seed=42,
-    )
-    sens_idx, _ = sens.build(sens_model, collate_fn=collate_fn)
-    dl_sens = make_subset_loader(
-        dset_train, sens_idx, args.bsz, args.workers, collate_fn, device
-    )
+    elif args.coreset_type == "sensitivity":
+        # Sensitivity coreset
+        sens_model = init_model(args.model_size, device)
+        sens = SensitivityCoreset(
+            dataset=dset_train,
+            coreset_fraction=args.coreset_fraction,
+            k_clusters_fraction=args.k_clusters_fraction,
+            pilot_fraction=args.pilot_fraction,
+            model=sens_model,
+            seed=42,
+        )
+        sens_idx, _ = sens.build(sens_model, collate_fn=collate_fn)
+        dl_sens = make_subset_loader(
+            dset_train, sens_idx, args.bsz, args.workers, collate_fn, device
+        )
+        print("\n== Training with SensitivityCoreset ==")
+        run_training("sensitivity", dl_sens, args, device, dl_val)
 
-    # --- helper for training -------------------------------------------------
-    def run_training(tag: str, loader: DataLoader) -> None:
-        model = init_model(args.model_size, device)
-        crit = nn.CrossEntropyLoss()
-        opt = optim.AdamW(model.parameters(), lr=args.lr)
-        scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
-
-        for ep in range(1, args.epochs + 1):
-            train_loss = train_epoch(
-                loader, model, crit, opt, scaler, device, args.accum_steps
-            )
-            val_loss = evaluate(dl_val, model, crit, device)
-            val_acc = evaluate_accuracy(dl_val, model, device)
-            print(
-                f"[{tag} epoch {ep}] train {train_loss:.4f} | "
-                f"val {val_loss:.4f} | acc {val_acc:.3%}"
-            )
-
-    print("\n== Training with UniformRandomCoreset ==")
-    run_training("uniform", dl_uniform)
-
-    print("\n== Training with SensitivityCoreset ==")
-    run_training("sensitivity", dl_sens)
+    else:  # args.coreset_type == "all" or fallback
+        # Full dataset (no coreset)
+        dl_full = DataLoader(
+            dset_train,
+            batch_size=args.bsz,
+            shuffle=True,
+            num_workers=args.workers,
+            collate_fn=collate_fn,
+            pin_memory=device.type == "cuda",
+        )
+        print("\n== Training with Full Dataset (no coreset) ==")
+        run_training("full", dl_full, args, device, dl_val)
 
 
 if __name__ == "__main__":  # pragma: no cover
