@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.so
+cache/
+.DS_Store
+.ipynb_checkpoints/
+.env
+*.egg-info/
