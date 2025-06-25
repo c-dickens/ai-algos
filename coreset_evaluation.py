@@ -261,10 +261,10 @@ def main():
     print(f"Number of clusters (k): {sensitivity_coreset.k_clusters}")
     print(f"Pilot size: {sensitivity_coreset.pilot_size}")
 
-    sampled_idx: List[int]
-    sample_weights: List[float]
-    sampled_idx, sample_weights = sensitivity_coreset.build(model, collate_fn=collate_fn)
-    print(f"Build method completed successfully")
+    sampled_idx, sample_weights = sensitivity_coreset.select_coreset(
+        model=model, collate_fn=collate_fn
+    )
+    print(f"select_coreset completed successfully")
     print(f"Embeddings shape: {len(sampled_idx)}")
     print(f"Sample weights:\n{sample_weights}")
 
@@ -276,9 +276,8 @@ def main():
     dl_sensitivity_coreset = DataLoader(dset_train, batch_size=args.bsz, shuffle=False,
                            sampler=sensitivity_sampler, num_workers=args.workers,
                            collate_fn=collate_fn, pin_memory=device.type == "cuda")
-    sample_weights_tensor = torch.tensor(sample_weights, dtype=torch.float)
     coreset_total_weighted_loss, coreset_avg_loss, coreset_total_samples = evaluate_model(
-        model, dl_sensitivity_coreset, device, weights=sample_weights_tensor,
+        model, dl_sensitivity_coreset, device, weights=sample_weights,
         max_num_batches=args.max_num_batches)
     print(f"Coreset total weighted loss: {coreset_total_weighted_loss:.4f}")
     print(f"Coreset average loss: {coreset_avg_loss:.4f}")
@@ -296,16 +295,14 @@ def main():
     print("Creating UniformRandomCoreset...")
     coreset = UniformRandomCoreset(dset_train, fraction=0.1, seed=42)
     
-    sel_idx: List[int]
-    weight: float
-    sel_idx, weight = coreset.select_coreset()
+    sel_idx, weights = coreset.select_coreset()
     print(f"Selected indices: {len(sel_idx)} samples")
-    print(f"Sampling weights: {weight:.2f}")
+    print(f"Sampling weights: {weights[0].item():.2f}")
     
     # Verify the weight calculation
     expected_weight = len(dset_train) / len(sel_idx)
     print(f"Expected weight: {expected_weight:.2f}")
-    print(f"Weight matches expected: {abs(weight - expected_weight) < 1e-6}")
+    print(f"Weight matches expected: {abs(weights[0].item() - expected_weight) < 1e-6}")
     
     # Geenrate the dataloaders for the coreset datasets
     print("\nTesting coreset data loader creation...")
@@ -316,7 +313,8 @@ def main():
     
     # Evaluate on coreset with weighted loss
     coreset_total_weighted_loss, coreset_avg_loss, coreset_total_samples = evaluate_model(
-        model, dl_uniform, device, weights=weight, max_num_batches=args.max_num_batches)
+        model, dl_uniform, device, weights=weights, max_num_batches=args.max_num_batches
+    )
     print(f"Coreset total weighted loss: {coreset_total_weighted_loss:.4f}")
     print(f"Coreset average loss: {coreset_avg_loss:.4f}")
     print(f"Full subset loss: {total_loss:.4f}")

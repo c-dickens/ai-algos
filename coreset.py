@@ -8,14 +8,30 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.random_projection import johnson_lindenstrauss_min_dim
 
 class Coreset:
+    """Base class for coreset construction.
+
+    Subclasses should implement :meth:`select_coreset` with the unified
+    ``(model=None, collate_fn=None, batch_size=32)`` signature, returning a
+    list of selected indices and a weight tensor of equal length.
+    """
+
     def __init__(self, dataset: Dataset,fraction:float=0.1, seed:int=540986710):
         self.dataset = dataset
         self.n = len(dataset)
         self.coreset_size = int(len(dataset) * fraction)
     
 
-    def select_coreset(self):
-        """Base method to select coreset indices and weights. Should be implemented by subclasses."""
+    def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32):
+        """Return selected indices and per-sample weights.
+
+        Args:
+            model (optional): Optional model used by some coreset methods.
+            collate_fn (callable, optional): Dataloader collate function.
+            batch_size (int, optional): Batch size when computing statistics.
+
+        Returns:
+            tuple[list[int], torch.Tensor]: indices and weight tensor.
+        """
         raise NotImplementedError("Subclasses must implement select_coreset method")
 
     def get_loader(self, batch_size, num_workers, pin_memory=True):
@@ -35,20 +51,26 @@ class Coreset:
 
 
 class UniformRandomCoreset(Coreset):
+    """Coreset that samples points uniformly at random."""
     def __init__(self, dataset: Dataset, fraction:float=0.1, seed:int=540986710):
         super().__init__(dataset, fraction, seed)
         if seed is not None:
             torch.manual_seed(seed)
 
-    def select_coreset(self):
-        """Uniformly select indices without replacement and compute sampling weight"""
+    def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32):
+        """Uniformly select indices without replacement.
+
+        Parameters are ignored but kept for API compatibility.
+        Returns the selected indices and a weight tensor of shape ``[len(indices)]``.
+        """
         idx = torch.randperm(self.n)[:self.coreset_size].tolist()
-        # Each sample in the coreset represents dataset_size / sample_size samples from the full dataset
         weight = self.n / self.coreset_size
-        return idx, weight
+        weights = torch.full((len(idx),), weight, dtype=torch.float)
+        return idx, weights
 
 
 class SensitivityCoreset(Coreset):
+    """Sensitivity-based coreset using model embeddings and clustering."""
     def __init__(self, dataset, coreset_fraction, k_clusters_fraction, pilot_fraction, model, z=2, lambda_=1.0, epsilon=0.1, seed=None):
         super().__init__(dataset, fraction=coreset_fraction, seed=seed)
         self.model = model.eval()
@@ -72,9 +94,20 @@ class SensitivityCoreset(Coreset):
             )
 
   
-    def select_coreset(self):
-        """Select coreset indices based on sensitivity"""
-        return self.build(self.model)
+    def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32):
+        """Select coreset indices based on sensitivity.
+
+        Args:
+            model (nn.Module, optional): Model to use for sensitivity computation. Defaults to ``self.model``.
+            collate_fn (callable, optional): Dataloader collate function.
+            batch_size (int, optional): Batch size for embedding computation.
+
+        Returns:
+            list[int], torch.Tensor: selected indices and per-sample weights.
+        """
+        if model is None:
+            model = self.model
+        return self._build(model=model, batch_size=batch_size, collate_fn=collate_fn)
 
     def compute_embeddings(self, loader):
         print("In compute_embeddings method")
@@ -117,7 +150,7 @@ class SensitivityCoreset(Coreset):
         
         return losses
 
-    def build(self, model: nn.Module, batch_size=32, collate_fn=None):
+    def _build(self, model: nn.Module, batch_size=32, collate_fn=None):
         """
         Construct a sensitivity-based coreset by estimating per-sample sensitivities using model embeddings, clustering, and loss information.
 
@@ -155,7 +188,7 @@ class SensitivityCoreset(Coreset):
             - The method prints diagnostic information about the clustering, losses, and sampling.
         """
         self._collate_fn = collate_fn
-        print("In build method")
+        print("In _build method")
 
         # step 0: compute all embeddings
         full_loader = DataLoader(self.dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
@@ -336,7 +369,7 @@ class SensitivityCoreset(Coreset):
         If pretty_print=True, print them in a formatted table.
         """
         if not hasattr(self, 'approx_cluster_sampling_probs') or not hasattr(self, 'approx_cluster_sampling_weights'):
-            raise AttributeError("Cluster sampling probabilities/weights not computed yet. Run build() first.")
+            raise AttributeError("Cluster sampling probabilities/weights not computed yet. Run select_coreset() first.")
         if mode == 'prob':
             d = self.approx_cluster_sampling_probs
             label = 'Prob'
