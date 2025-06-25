@@ -322,8 +322,7 @@ def main():
     print(f"Full subset loss: {total_loss:.4f}")
     print(f"Absolute error (coreset - full)/full: {abs(coreset_total_weighted_loss - total_loss)/total_loss:.4f}")
     print(f"Full dataset size N: {total_samples}")
-    print(f"Coreset size: {len(sel_idx)}")
-
 
 if __name__ == "__main__":
-    main() 
+    main()
+
