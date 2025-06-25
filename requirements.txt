@@ -1,0 +1,16 @@
+# Requirements for LLMs-from-scratch exercises
+# Recommended: Linux OS, CUDA-enabled GPU for deep learning (NVIDIA), Python 3.8+
+
+# Core dependencies
+numpy
+pandas
+torch
+scikit-learn
+tqdm
+tiktoken
+
+# Optional: For GPU acceleration
+# torch (with CUDA) - see https://pytorch.org/get-started/locally/
+
+# Note: For best performance, use a machine with an NVIDIA GPU and CUDA drivers installed.
+# Some scripts may require large memory and disk space for model/data handling. 
