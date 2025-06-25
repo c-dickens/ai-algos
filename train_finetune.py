@@ -14,6 +14,7 @@ import argparse
 import os
 from pathlib import Path
 from typing import List, Tuple
+from datetime import datetime
 
 import pandas as pd
 import torch
@@ -147,16 +148,73 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
     opt = optim.AdamW(model.parameters(), lr=args.lr)
     scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
 
-    for ep in range(1, args.epochs + 1):
-        train_loss = train_epoch(
-            loader, model, crit, opt, scaler, device, args.accum_steps
-        )
-        val_loss = evaluate(dl_val, model, crit, device)
-        val_acc = evaluate_accuracy(model, dl_val, device)
-        print(
-            f"[{tag} epoch {ep}] train {train_loss:.4f} | "
-            f"val {val_loss:.4f} | acc {val_acc:.3%}"
-        )
+    train_eval_loader = DataLoader(
+        loader.dataset,
+        batch_size=args.bsz,
+        shuffle=False,
+        num_workers=args.workers,
+        collate_fn=loader.collate_fn,
+        pin_memory=device.type == "cuda",
+    )
+
+    eval_every = args.eval_every if args.eval_every > 0 else len(loader)
+    global_step = 0
+
+    with open(args.log_file, "w") as fh:
+        fh.write("step,epoch,train_loss,train_acc,val_loss,val_acc\n")
+
+        autocast = torch.cuda.amp.autocast if device.type == "cuda" else torch.autocast
+
+        for ep in range(1, args.epochs + 1):
+            running_loss = 0.0
+            running_correct = 0
+            running_total = 0
+
+            for x, y in tqdm(loader, leave=False):
+                x, y = x.to(device), y.to(device)
+                with autocast():
+                    logits = model(x)
+                    loss = crit(logits[:, -1, :], y) / args.accum_steps
+                scaler.scale(loss).backward()
+                if (global_step + 1) % args.accum_steps == 0:
+                    scaler.step(opt)
+                    scaler.update()
+                    opt.zero_grad()
+
+                preds = logits[:, -1, :].argmax(dim=-1)
+                running_correct += (preds == y).sum().item()
+                running_loss += loss.item() * y.size(0)
+                running_total += y.size(0)
+                global_step += 1
+
+                if args.eval_every > 0 and global_step % eval_every == 0:
+                    train_acc = evaluate_accuracy(model, train_eval_loader, device)
+                    val_loss = evaluate(dl_val, model, crit, device)
+                    val_acc = evaluate_accuracy(model, dl_val, device)
+                    train_loss = running_loss / running_total if running_total > 0 else float("nan")
+                    fh.write(f"{global_step},{ep},{train_loss},{train_acc},{val_loss},{val_acc}\n")
+                    fh.flush()
+                    print(
+                        f"[{tag} step {global_step} epoch {ep}] "
+                        f"train {train_loss:.4f} acc {train_acc:.3%} | "
+                        f"val {val_loss:.4f} acc {val_acc:.3%}"
+                    )
+                    running_loss = 0.0
+                    running_correct = 0
+                    running_total = 0
+
+            if args.eval_every == 0 or running_total > 0:
+                train_acc = evaluate_accuracy(model, train_eval_loader, device)
+                val_loss = evaluate(dl_val, model, crit, device)
+                val_acc = evaluate_accuracy(model, dl_val, device)
+                train_loss = running_loss / running_total if running_total > 0 else float("nan")
+                fh.write(f"{global_step},{ep},{train_loss},{train_acc},{val_loss},{val_acc}\n")
+                fh.flush()
+                print(
+                    f"[{tag} step {global_step} epoch {ep}] "
+                    f"train {train_loss:.4f} acc {train_acc:.3%} | "
+                    f"val {val_loss:.4f} acc {val_acc:.3%}"
+                )
 
 
 def get_args() -> argparse.Namespace:
@@ -180,6 +238,14 @@ def get_args() -> argparse.Namespace:
                    help="Pilot fraction for sensitivity coreset")
     p.add_argument("--max-num-batches", type=int, default=None,
                    help="Optional limit for number of batches")
+    p.add_argument("--eval-every", type=int, default=0,
+                   help="Evaluation interval in steps (0 -> once per epoch)")
+    p.add_argument(
+        "--log-file",
+        type=str,
+        default=f"training_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        help="CSV file for metrics",
+    )
     p.add_argument("--coreset-type", choices=["uniform", "sensitivity", "all"], default="all",
                    help="Which coreset strategy to use")
     return p.parse_args()
