@@ -18,4 +18,3 @@ def evaluate_accuracy(model: nn.Module, dataloader: DataLoader, device: torch.de
             correct += (preds == y).sum().item()
             total += y.size(0)
     return correct / total if total > 0 else 0.0
-
