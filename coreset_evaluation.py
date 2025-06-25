@@ -277,7 +277,8 @@ def main():
                            sampler=sensitivity_sampler, num_workers=args.workers,
                            collate_fn=collate_fn, pin_memory=device.type == "cuda")
     coreset_total_weighted_loss, coreset_avg_loss, coreset_total_samples = evaluate_model(
-        model, dl_sensitivity_coreset, device, weights=sample_weights, max_num_batches=None)
+        model, dl_sensitivity_coreset, device, weights=sample_weights,
+        max_num_batches=args.max_num_batches)
     print(f"Coreset total weighted loss: {coreset_total_weighted_loss:.4f}")
     print(f"Coreset average loss: {coreset_avg_loss:.4f}")
     print(f"Full subset loss: {total_loss:.4f}")
@@ -312,7 +313,7 @@ def main():
     
     # Evaluate on coreset with weighted loss
     coreset_total_weighted_loss, coreset_avg_loss, coreset_total_samples = evaluate_model(
-        model, dl_uniform, device, weights=weights, max_num_batches=None)
+        model, dl_uniform, device, weights=weights, max_num_batches=args.max_num_batches)
     print(f"Coreset total weighted loss: {coreset_total_weighted_loss:.4f}")
     print(f"Coreset average loss: {coreset_avg_loss:.4f}")
     print(f"Full subset loss: {total_loss:.4f}")
