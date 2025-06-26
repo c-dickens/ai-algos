@@ -10,7 +10,11 @@ def evaluate_accuracy(model: nn.Module, dataloader: DataLoader, device: torch.de
     correct = 0
     total = 0
     with torch.no_grad():
-        for x, y in tqdm(dataloader, desc="Evaluating accuracy", leave=False):
+        for batch in tqdm(dataloader, desc="Evaluating accuracy", leave=False):
+            if len(batch) == 3:
+                x, y, _ = batch
+            else:
+                x, y = batch
             x = x.to(device)
             y = y.to(device)
             logits = model(x)
