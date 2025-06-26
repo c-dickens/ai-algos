@@ -214,7 +214,15 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
     eval_every = args.eval_every if args.eval_every > 0 else len(loader)
     global_step = 0
 
-    with open(args.log_file, "w") as fh:
+    # Add datetime to log file name
+    now_str = datetime.now().strftime("_%Y%m%d_%H%M%S")
+    log_file = args.log_file
+    if log_file.endswith('.csv'):
+        log_file = log_file[:-4] + now_str + '.csv'
+    else:
+        log_file = log_file + now_str
+
+    with open(log_file, "w") as fh:
         fh.write("step,epoch,train_loss,train_acc,val_loss,val_acc\n")
 
         autocast = torch.cuda.amp.autocast if device.type == "cuda" else torch.autocast
@@ -224,7 +232,7 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
             running_correct = 0
             running_total = 0
 
-            for batch in tqdm(loader, leave=False):
+            for batch_idx, batch in enumerate(tqdm(loader, leave=False)):
                 if len(batch) == 3:
                     x, y, w = batch
                     w = w.to(device)
@@ -345,7 +353,6 @@ def main(args: argparse.Namespace) -> None:
     )
 
     if args.coreset_type == "uniform":
-        # Uniform coreset
         uniform = UniformRandomCoreset(dset_train, fraction=args.coreset_fraction)
         uniform_idx, uniform_w = uniform.select_coreset()
         dl_uniform = make_subset_loader(
@@ -361,7 +368,6 @@ def main(args: argparse.Namespace) -> None:
         run_training("uniform", dl_uniform, args, device, dl_val)
 
     elif args.coreset_type == "sensitivity":
-        # Sensitivity coreset
         sens_model = init_model(args.model_size, device)
         sens = SensitivityCoreset(
             dataset=dset_train,
@@ -385,17 +391,18 @@ def main(args: argparse.Namespace) -> None:
         run_training("sensitivity", dl_sens, args, device, dl_val)
 
     else:  # args.coreset_type == "all" or fallback
-        # Full dataset (no coreset)
-        dl_full = DataLoader(
-            dset_train,
-            batch_size=args.bsz,
-            shuffle=True,
-            num_workers=args.workers,
-            collate_fn=collate_fn,
-            pin_memory=device.type == "cuda",
-        )
-        print("\n== Training with Full Dataset (no coreset) ==")
-        run_training("full", dl_full, args, device, dl_val)
+        pass
+        # print("[DEBUG] Creating full DataLoader (no coreset)...")
+        # dl_full = DataLoader(
+        #     dset_train,
+        #     batch_size=args.bsz,
+        #     shuffle=True,
+        #     num_workers=args.workers,
+        #     collate_fn=collate_fn,
+        #     pin_memory=device.type == "cuda",
+        # )
+        # print("\n== Training with Full Dataset (no coreset) ==")
+        # run_training("full", dl_full, args, device, dl_val)
 
 
 if __name__ == "__main__":  # pragma: no cover

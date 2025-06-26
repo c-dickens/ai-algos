@@ -30,7 +30,7 @@ for m in "${methods[@]}"; do
     python3 "$SCRIPT_DIR/train_finetune.py" \
         --coreset-type "$m" \
         --model-size "$MODEL" \
-        --epochs 3 \
+        --epochs 5 \
         --eval-every 256 \
         --log-file "$LOGDIR/${m}_${MODEL}.csv" \
         "$@"
