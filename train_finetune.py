@@ -208,7 +208,7 @@ def make_subset_loader(
     )
 
 
-def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device: torch.device, dl_val: DataLoader) -> None:
+def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device: torch.device, dl_val: DataLoader):
     model = init_model(args.model_size, device)
     crit = nn.CrossEntropyLoss()
     crit_none = nn.CrossEntropyLoss(reduction="none")
@@ -235,6 +235,7 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
     else:
         log_file = log_file + now_str
 
+    final_metrics = None
     with open(log_file, "w") as fh:
         fh.write("step,epoch,train_loss,train_acc,val_loss,val_acc\n")
 
@@ -299,6 +300,14 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
                     f"train {train_loss:.4f} acc {train_acc:.3%} | "
                     f"val {val_loss:.4f} acc {val_acc:.3%}"
                 )
+                final_metrics = {
+                    "train_loss": train_loss,
+                    "train_acc": train_acc,
+                    "val_loss": val_loss,
+                    "val_acc": val_acc,
+                }
+
+    return final_metrics, log_file
 
 
 def get_args() -> argparse.Namespace:
