@@ -302,7 +302,7 @@ def main(args: argparse.Namespace) -> None:
             model=sens_model,
             seed=42,
         )
-        sens_idx, _ = sens.build(sens_model, collate_fn=collate_fn)
+        sens_idx, _ = sens.select_coreset(sens_model, collate_fn=collate_fn)
         dl_sens = make_subset_loader(
             dset_train, sens_idx, args.bsz, args.workers, collate_fn, device
         )

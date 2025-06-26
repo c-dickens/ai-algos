@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 CORESET=${1:-all}
 MODEL=${2:-124M}
 LOGDIR=${3:-logs}
@@ -24,10 +27,11 @@ else
 fi
 
 for m in "${methods[@]}"; do
-    python3 train_finetune.py \
+    python3 "$SCRIPT_DIR/train_finetune.py" \
         --coreset-type "$m" \
         --model-size "$MODEL" \
         --epochs 3 \
+        --eval-every 256 \
         --log-file "$LOGDIR/${m}_${MODEL}.csv" \
         "$@"
 done
