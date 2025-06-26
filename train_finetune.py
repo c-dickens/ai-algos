@@ -19,7 +19,13 @@ from datetime import datetime
 import pandas as pd
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader, Dataset, SubsetRandomSampler
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    SubsetRandomSampler,
+    WeightedRandomSampler,
+    Subset,
+)
 from tqdm.auto import tqdm
 
 import eda
@@ -44,14 +50,48 @@ class IMDBDataset(Dataset):
         return torch.tensor(self.toks[idx], dtype=torch.long), self.labels[idx]
 
 
-def collate(batch, max_len: int = 256) -> Tuple[torch.Tensor, torch.Tensor]:
-    seqs, labels = zip(*batch)
+class WeightedSubset(Dataset):
+    """Dataset subset that yields ``(x, y, weight)`` for weighted sampling.
+
+    When used alongside :func:`make_subset_loader`, each item includes its
+    associated sampling weight so the training loop can scale the loss.
+    This dataset pairs with :class:`~torch.utils.data.WeightedRandomSampler`
+    to draw weighted batches while still returning the weight tensor.
+    """
+
+    def __init__(self, dataset: Dataset, indices: List[int], weights: torch.Tensor):
+        self.dataset = dataset
+        self.indices = indices
+        self.weights = weights
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def __getitem__(self, idx: int):
+        x, y = self.dataset[self.indices[idx]]
+        return x, y, self.weights[idx]
+
+
+def collate(batch, max_len: int = 256):
+    """Pad a batch and optionally return per-sample weights."""
+
+    has_weight = len(batch[0]) == 3
+    if has_weight:
+        seqs, labels, weights = zip(*batch)
+    else:
+        seqs, labels = zip(*batch)
+        weights = None
+
     L = min(max(len(s) for s in seqs), max_len) + 1
     padded = torch.full((len(seqs), L), _PAD, dtype=torch.long)
     for i, seq in enumerate(seqs):
         trunc = seq[: L - 1]
         padded[i, : len(trunc)] = trunc
-    return padded[:, :-1], torch.stack(labels)
+
+    out = [padded[:, :-1], torch.stack(labels)]
+    if has_weight:
+        out.append(torch.tensor(weights, dtype=torch.float))
+    return tuple(out)
 
 
 def build_backbone(size: str, cache_dir: str = "gpt2") -> Tuple[nn.Module, int]:
@@ -120,7 +160,11 @@ def evaluate(loader: DataLoader, model: nn.Module, crit: nn.Module,
     total_loss = 0.0
     total = 0
     with torch.no_grad():
-        for x, y in loader:
+        for batch in loader:
+            if len(batch) == 3:
+                x, y, _ = batch
+            else:
+                x, y = batch
             x, y = x.to(device), y.to(device)
             logits = model(x)
             l = crit(logits[:, -1, :], y)
@@ -129,11 +173,33 @@ def evaluate(loader: DataLoader, model: nn.Module, crit: nn.Module,
     return total_loss / total if total > 0 else float("nan")
 
 
-def make_subset_loader(dataset: Dataset, indices: List[int], batch_size: int,
-                       workers: int, collate_fn, device: torch.device) -> DataLoader:
-    sampler = SubsetRandomSampler(indices)
+def make_subset_loader(
+    dataset: Dataset,
+    indices: List[int],
+    batch_size: int,
+    workers: int,
+    collate_fn,
+    device: torch.device,
+    weights: torch.Tensor | None = None,
+) -> DataLoader:
+    """Return a DataLoader over ``indices`` with optional weights.
+
+    If ``weights`` is provided, the loader uses a
+    :class:`~torch.utils.data.WeightedRandomSampler` with replacement to sample
+    from ``indices`` according to these weights and yields batches of
+    ``(x, y, weight)``.  Otherwise a normal :class:`SubsetRandomSampler` is used
+    and the batches contain only ``(x, y)``.
+    """
+
+    if weights is not None:
+        sub_dset = WeightedSubset(dataset, indices, weights)
+        sampler = WeightedRandomSampler(weights=weights, num_samples=len(weights), replacement=True)
+    else:
+        sub_dset = Subset(dataset, indices)
+        sampler = SubsetRandomSampler(range(len(indices)))
+
     return DataLoader(
-        dataset,
+        sub_dset,
         batch_size=batch_size,
         sampler=sampler,
         num_workers=workers,
@@ -145,6 +211,7 @@ def make_subset_loader(dataset: Dataset, indices: List[int], batch_size: int,
 def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device: torch.device, dl_val: DataLoader) -> None:
     model = init_model(args.model_size, device)
     crit = nn.CrossEntropyLoss()
+    crit_none = nn.CrossEntropyLoss(reduction="none")
     opt = optim.AdamW(model.parameters(), lr=args.lr)
     scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
 
@@ -170,11 +237,20 @@ def run_training(tag: str, loader: DataLoader, args: argparse.Namespace, device:
             running_correct = 0
             running_total = 0
 
-            for x, y in tqdm(loader, leave=False):
+            for batch in tqdm(loader, leave=False):
+                if len(batch) == 3:
+                    x, y, w = batch
+                    w = w.to(device)
+                else:
+                    x, y = batch
+                    w = None
                 x, y = x.to(device), y.to(device)
                 with autocast():
                     logits = model(x)
-                    loss = crit(logits[:, -1, :], y) / args.accum_steps
+                    losses = crit_none(logits[:, -1, :], y)
+                    if w is not None:
+                        losses = losses * w
+                    loss = losses.mean() / args.accum_steps
                 scaler.scale(loss).backward()
                 if (global_step + 1) % args.accum_steps == 0:
                     scaler.step(opt)
@@ -284,9 +360,15 @@ def main(args: argparse.Namespace) -> None:
     if args.coreset_type == "uniform":
         # Uniform coreset
         uniform = UniformRandomCoreset(dset_train, fraction=args.coreset_fraction)
-        uniform_idx, _ = uniform.select_coreset()
+        uniform_idx, uniform_w = uniform.select_coreset()
         dl_uniform = make_subset_loader(
-            dset_train, uniform_idx, args.bsz, args.workers, collate_fn, device
+            dset_train,
+            uniform_idx,
+            args.bsz,
+            args.workers,
+            collate_fn,
+            device,
+            weights=uniform_w,
         )
         print("\n== Training with UniformRandomCoreset ==")
         run_training("uniform", dl_uniform, args, device, dl_val)
@@ -302,9 +384,15 @@ def main(args: argparse.Namespace) -> None:
             model=sens_model,
             seed=42,
         )
-        sens_idx, _ = sens.select_coreset(sens_model, collate_fn=collate_fn)
+        sens_idx, sens_w = sens.select_coreset(sens_model, collate_fn=collate_fn)
         dl_sens = make_subset_loader(
-            dset_train, sens_idx, args.bsz, args.workers, collate_fn, device
+            dset_train,
+            sens_idx,
+            args.bsz,
+            args.workers,
+            collate_fn,
+            device,
+            weights=sens_w,
         )
         print("\n== Training with SensitivityCoreset ==")
         run_training("sensitivity", dl_sens, args, device, dl_val)
