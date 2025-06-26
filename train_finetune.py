@@ -51,7 +51,13 @@ class IMDBDataset(Dataset):
 
 
 class WeightedSubset(Dataset):
-    """Subset wrapper that also returns per-sample weights."""
+    """Dataset subset that yields ``(x, y, weight)`` for weighted sampling.
+
+    When used alongside :func:`make_subset_loader`, each item includes its
+    associated sampling weight so the training loop can scale the loss.
+    This dataset pairs with :class:`~torch.utils.data.WeightedRandomSampler`
+    to draw weighted batches while still returning the weight tensor.
+    """
 
     def __init__(self, dataset: Dataset, indices: List[int], weights: torch.Tensor):
         self.dataset = dataset
@@ -176,7 +182,14 @@ def make_subset_loader(
     device: torch.device,
     weights: torch.Tensor | None = None,
 ) -> DataLoader:
-    """Return a DataLoader over ``indices`` with optional importance weights."""
+    """Return a DataLoader over ``indices`` with optional weights.
+
+    If ``weights`` is provided, the loader uses a
+    :class:`~torch.utils.data.WeightedRandomSampler` with replacement to sample
+    from ``indices`` according to these weights and yields batches of
+    ``(x, y, weight)``.  Otherwise a normal :class:`SubsetRandomSampler` is used
+    and the batches contain only ``(x, y)``.
+    """
 
     if weights is not None:
         sub_dset = WeightedSubset(dataset, indices, weights)

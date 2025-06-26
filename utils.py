@@ -5,7 +5,11 @@ from tqdm import tqdm
 
 
 def evaluate_accuracy(model: nn.Module, dataloader: DataLoader, device: torch.device) -> float:
-    """Return accuracy of *model* on *dataloader*."""
+    """Return accuracy of *model* on ``dataloader``.
+
+    The dataloader may optionally yield sample weights alongside each batch.
+    These weights are ignored for accuracy computation.
+    """
     model.eval()
     correct = 0
     total = 0
