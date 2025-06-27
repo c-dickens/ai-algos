@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import os
 import sys
+import argparse
 from typing import Dict, List, Tuple
 import time
 
@@ -224,11 +225,20 @@ def save_results_to_csv(df: pd.DataFrame, filename: str = "active_learning_resul
 
 def main():
     """Main function to run all experiments"""
+    parser = argparse.ArgumentParser(description="Run multiple active learning experiments")
+    parser.add_argument("--num_experiments", type=int, default=3, 
+                       help="Number of experiments to run (default: 3)")
+    parser.add_argument("--methods", nargs="+", default=["sensitivity", "uniform"],
+                       help="Coreset methods to test (default: sensitivity uniform)")
+    args = parser.parse_args()
+    
     print("Starting multiple active learning experiments...")
+    print(f"Number of experiments: {args.num_experiments}")
+    print(f"Methods to test: {args.methods}")
     print("Testing sensitivity vs uniform sampling with multiple seeds")
     
-    # Run experiments (3 experiments by default)
-    df = run_multiple_experiments(num_experiments=3)
+    # Run experiments
+    df = run_multiple_experiments(num_experiments=args.num_experiments, methods=args.methods)
     
     # Print results table
     print_results_table(df)
