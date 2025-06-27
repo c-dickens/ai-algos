@@ -15,10 +15,11 @@ class Coreset:
     list of selected indices and a weight tensor of equal length.
     """
 
-    def __init__(self, dataset: Dataset,fraction:float=0.1, seed:int=540986710):
+    def __init__(self, dataset: Dataset, coreset_size:int, seed:int=540986710):
         self.dataset = dataset
         self.n = len(dataset)
-        self.coreset_size = int(len(dataset) * fraction)
+        self.coreset_size = coreset_size
+        assert self.coreset_size <= len(dataset), "Coreset size must be less than or equal to dataset size"
     
 
     def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32):
@@ -52,8 +53,8 @@ class Coreset:
 
 class UniformRandomCoreset(Coreset):
     """Coreset that samples points uniformly at random."""
-    def __init__(self, dataset: Dataset, fraction:float=0.1, seed:int=540986710):
-        super().__init__(dataset, fraction, seed)
+    def __init__(self, dataset: Dataset, coreset_size:int, seed:int=540986710):
+        super().__init__(dataset, coreset_size, seed)
         if seed is not None:
             torch.manual_seed(seed)
 
@@ -71,16 +72,15 @@ class UniformRandomCoreset(Coreset):
 
 class SensitivityCoreset(Coreset):
     """Sensitivity-based coreset using model embeddings and clustering."""
-    def __init__(self, dataset, coreset_fraction, k_clusters_fraction, pilot_fraction, model, z=2, lambda_=1.0, epsilon=0.1, seed=None):
-        super().__init__(dataset, fraction=coreset_fraction, seed=seed)
+    #def __init__(self, dataset, coreset_fraction, k_clusters_fraction, pilot_fraction, model, z=2, seed=None):
+    def __init__(self, dataset, coreset_size, k_clusters, pilot_size, model, z=2, seed=None):
+        super().__init__(dataset, coreset_size, seed=seed)
         self.model = model.eval()
-        self.total_coreset_size = int(coreset_fraction * len(dataset))
-        self.k_clusters = int(k_clusters_fraction * self.total_coreset_size)
-        self.pilot_size = int(pilot_fraction * self.total_coreset_size)
-        self.num_points_to_sample = self.total_coreset_size - self.k_clusters - self.pilot_size
+        self.coreset_size = coreset_size
+        self.k_clusters = k_clusters
+        self.pilot_size = pilot_size
+        self.num_points_to_sample = self.coreset_size - self.k_clusters - self.pilot_size
         self.z = z  # Distance exponent (1→k-median, 2→k-means)
-        self.lambda_ = lambda_  # Balances loss vs distance in sensitivity
-        self.epsilon = epsilon  # Determines pilot_size and theoretical guarantees
         if seed is not None:
             torch.manual_seed(seed)
             np.random.seed(seed)
@@ -88,13 +88,13 @@ class SensitivityCoreset(Coreset):
                 # User-friendly check
         if self.pilot_size <= self.k_clusters:
             raise ValueError(
-                f"pilot_size ({self.pilot_size}) from pilot_fraction{pilot_fraction} must be greater than k_clusters ({self.k_clusters}),"
-                f"evaluated from k_clusters_fraction{k_clusters_fraction}."
+                f"pilot_size ({self.pilot_size}) must be greater than k_clusters ({self.k_clusters}),"
+                f"evaluated from k_clusters."
                 "Please increase pilot_fraction or decrease k_clusters_fraction."
             )
 
   
-    def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32):
+    def select_coreset(self, model=None, collate_fn=None, batch_size: int = 32, debug:bool=False):
         """Select coreset indices based on sensitivity.
 
         Args:
@@ -107,10 +107,9 @@ class SensitivityCoreset(Coreset):
         """
         if model is None:
             model = self.model
-        return self._build(model=model, batch_size=batch_size, collate_fn=collate_fn)
+        return self._build(model=model, batch_size=batch_size, collate_fn=collate_fn, debug=debug)
 
     def compute_embeddings(self, loader):
-        print("In compute_embeddings method")
         embs = []
         with torch.no_grad():
             for x, _ in loader:  # only inputs needed
@@ -119,7 +118,7 @@ class SensitivityCoreset(Coreset):
                 hidden = self.model.get_embeddings(x)  # This gives us the penultimate layer output
                 # Average over the sequence length to get a single embedding per sample
                 # Or you could use the last token: hidden[:, -1, :]
-                hidden = hidden.mean(dim=1)  # Average pooling over sequence dimension to get sequence embedding
+                # nb. do not delete this for now hidden = hidden.mean(dim=1)  # Average pooling over sequence dimension to get sequence embedding
                 embs.append(hidden.cpu().numpy())
         return np.concatenate(embs, axis=0)
 
@@ -144,13 +143,15 @@ class SensitivityCoreset(Coreset):
                 x_batch, y_batch = x_batch.to(device), y_batch.to(device)
                 # Apply the full model to get classification logits
                 logits = self.model(x_batch)  # final classification logits
-                logits = logits[:, -1, :]  # Take the last token for classification
+                if logits.dim() == 3: 
+                    # this is for classification models that output a sequence of logits ie LLMs
+                    logits = logits[:, -1, :]  # Take the last token for classification
                 batch_losses = criterion_none(logits, y_batch).cpu().numpy()
                 losses.extend(batch_losses.tolist())
         
         return losses
 
-    def _build(self, model: nn.Module, batch_size=32, collate_fn=None):
+    def _build(self, model: nn.Module, batch_size=32, collate_fn=None, debug:bool=False):
         """
         Construct a sensitivity-based coreset by estimating per-sample sensitivities using model embeddings, clustering, and loss information.
 
@@ -174,8 +175,8 @@ class SensitivityCoreset(Coreset):
 
         Returns:
             tuple:
-                - sample_idx (list[int]): List of selected coreset indices (with replacement, length = total_coreset_size).
-                - weights (torch.Tensor): Tensor of per-sample weights for the selected indices (shape: [total_coreset_size]).
+                - sample_idx (list[int]): List of selected coreset indices (with replacement, length = coreset_size).
+                - weights (torch.Tensor): Tensor of per-sample weights for the selected indices (shape: [coreset_size]).
 
         Side Effects:
             - Sets self.approx_cluster_sampling_probs: dict mapping cluster index to its sampling probability.
@@ -188,12 +189,11 @@ class SensitivityCoreset(Coreset):
             - The method prints diagnostic information about the clustering, losses, and sampling.
         """
         self._collate_fn = collate_fn
-        print("In _build method")
+        
 
         # step 0: compute all embeddings
         full_loader = DataLoader(self.dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=False)
         full_embs = self.compute_embeddings(full_loader)
-        print(f"Full embeddings shape: {full_embs.shape}")
 
         # step 1. [heuristic] uniformly sample a small pilot subset that we will use for projection
         pilot_idxs = np.random.choice(self.n, size=self.pilot_size, replace=False)
@@ -202,8 +202,6 @@ class SensitivityCoreset(Coreset):
         pca = PCA(n_components=0.975, svd_solver='auto', random_state=44875)
         X_reduced = pca.fit_transform(pilot_embs)  # Fit on pilot, transform pilot
         X_full_reduced = pca.transform(full_embs)  # Transform full data using pilot-fitted PCA
-        print(f"Reduced from {pilot_embs.shape[1]} to {X_reduced.shape[1]} dimensions (95% variance)")
-        print(f"X_full_reduced shape: {X_full_reduced.shape}")
 
         # step 2. k-means clustering on the pilot data
         km = KMeans(n_clusters=self.k_clusters, init='k-means++', n_init=10, random_state=42)
@@ -224,21 +222,17 @@ class SensitivityCoreset(Coreset):
         # Find closest point to each centroid in out_of_data_centroids
         in_data_centers = np.argmin(masked_dists, axis=0)
         in_data_centroid_vectors = X_full_reduced[in_data_centers]
-        print(f"In-data centers: {in_data_centers}")
-        print(f"In-data centroids shape: {in_data_centroid_vectors.shape}")
+        
         
         # Compute losses for the center points
         losses_centers = self.compute_losses_on_indices(in_data_centers.tolist(), self._collate_fn)
-        print(f"Losses centers: {losses_centers}")
         
         # Create mapping from cluster index to center loss
         center_losses = dict(zip(range(self.k_clusters), losses_centers))
-        print(f"Center losses mapping: {center_losses}")
+      
         
         # Calculate sum of all losses: center_loss * number_of_points_in_cluster
         sum_x_losses = sum([center_losses[i] * len(points_in_clusters[i]) for i in range(self.k_clusters)])
-        print(f"Sum of all losses: {sum_x_losses}")
-        
         
         # Estimate Hölder constants using optimized method
         cluster_lambdas = self.estimate_holder_lambda_logsample(
@@ -249,9 +243,6 @@ class SensitivityCoreset(Coreset):
             dists_to_centroids=dists_to_centroids,  # Pass precomputed distances
             p=0.9
         )
-        print("Cluster λ and sizes:")
-        print(f"{'Cluster':>8} | {'Size':>8} | {'Lambda':>12}")
-        print('-' * 34)
         for cluster_idx in range(self.k_clusters):
             size = len(points_in_clusters[cluster_idx])
             lambda_val = cluster_lambdas[cluster_idx]
@@ -262,7 +253,7 @@ class SensitivityCoreset(Coreset):
         all_embedding_dists = np.linalg.norm(X_full_reduced - per_point_centroid_vector, axis=1, ord=self.z) ** self.z # (n,) --> distance to centroid for each point
         weighted_costs = per_point_lambdas * all_embedding_dists # (n,) --> weighted cost for each point
         global_weighted_costs = weighted_costs.sum()
-        print(f"Global weighted costs: {global_weighted_costs}")
+        
         
         # ---------- NEW: sensitivity, probabilities, sampling ----------
         # s(e) = l̂(e) + Λ_i ‖e - c_i‖^z
@@ -277,12 +268,27 @@ class SensitivityCoreset(Coreset):
         assert probs.shape == (self.n,), f"PROBABILITY SHAPE: {probs.shape}"
         
         # first get the losses for all of the cluster centres that 
-        sample_idx = np.random.choice(self.n, size=self.total_coreset_size, replace=True, p=probs) # can optimise by taking cluster centres
-        weights   = 1.0 / (self.total_coreset_size * probs[sample_idx])                                  # w(e)
+        sample_idx = np.random.choice(self.n, size=self.coreset_size, replace=True, p=probs) # can optimise by taking cluster centres
+        weights   = 1.0 / (self.coreset_size * probs[sample_idx])                                  # w(e)
 
         # Save cluster sampling weights (proportion of points in each cluster)
         self.approx_cluster_sampling_probs = {i : center_losses_arr[i]/denominator for i in range(self.k_clusters)}
-        self.approx_cluster_sampling_weights = {k : 1.0 / (self.total_coreset_size * v) for k,v in self.approx_cluster_sampling_probs.items()}
+        self.approx_cluster_sampling_weights = {k : 1.0 / (self.coreset_size * v) for k,v in self.approx_cluster_sampling_probs.items()}
+
+        if debug:
+            print("In _build method")
+            print(f"Full embeddings shape: {full_embs.shape}")
+            print(f"Reduced from {pilot_embs.shape[1]} to {X_reduced.shape[1]} dimensions (95% variance)")
+            print(f"X_full_reduced shape: {X_full_reduced.shape}")
+            print(f"In-data centers: {in_data_centers}")
+            print(f"In-data centroids shape: {in_data_centroid_vectors.shape}")
+            print(f"Losses centers: {losses_centers}")
+            print(f"Center losses mapping: {center_losses}")
+            print(f"Sum of all losses: {sum_x_losses}")
+            print("Cluster λ and sizes:")
+            print(f"{'Cluster':>8} | {'Size':>8} | {'Lambda':>12}")
+            print('-' * 34)
+            print(f"Global weighted costs: {global_weighted_costs}") 
 
         return sample_idx.tolist(), torch.tensor(weights, dtype=torch.float)
 
@@ -307,7 +313,6 @@ class SensitivityCoreset(Coreset):
         num_clusters = centroids.shape[0]
         cluster_lambdas = {}
         sample_points_per_cluster = int(np.ceil(-np.log(100 * num_clusters) / np.log(1 - p)))
-        print(f"Sampling at most {sample_points_per_cluster} points from all clusters for lambda estimation (excluding center).")
 
         for i in range(num_clusters):
             in_cluster_indices = np.array(centroid_to_points[i])
