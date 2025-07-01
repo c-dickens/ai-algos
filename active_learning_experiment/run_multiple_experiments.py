@@ -22,9 +22,9 @@ from datetime import datetime
 # Import functions from main.py
 sys.path.append('.')
 from main import MLP, CNN, get_device, load_dataset, train_model, compute_losses, coreset_sampling
-from models import MnistNet
+from models import MnistNet, CifarNet
 
-def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict:
+def run_single_experiment(seed: int, coreset_method: str, k: int = 1024, dataset: str = 'mnist', num_epochs: int = 10) -> Dict:
     """
     Run a single experiment with given seed and coreset method
     
@@ -32,12 +32,14 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
         seed: Random seed for reproducibility
         coreset_method: Either "sensitivity" or "uniform"
         k: Total budget size
+        dataset: 'mnist' or 'cifar10'
+        num_epochs: number of epochs
     
     Returns:
         Dictionary containing experiment results
     """
     print(f"\n{'='*60}")
-    print(f"Running experiment with seed {seed}, method: {coreset_method}")
+    print(f"Running experiment with seed {seed}, method: {coreset_method}, dataset: {dataset}")
     print(f"{'='*60}")
     
     # Set seeds
@@ -48,8 +50,8 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     device = get_device()
     print(f"Using device: {device}")
     
-    # Load MNIST dataset
-    train_dataset, test_dataset = load_dataset("mnist")
+    # Load dataset
+    train_dataset, test_dataset = load_dataset(dataset)
     
     # Use a small budget for testing
     k_prime = int(k >> 2)  # 256 initial points
@@ -68,12 +70,17 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     # Step 2: Train initial model
     BATCH_SIZE = 32
     EVALUATION_BATCH_SIZE = 128
-    model = MnistNet()
+    if dataset == 'mnist':
+        model = MnistNet()
+    elif dataset == 'cifar10':
+        model = CifarNet()
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
     train_loader = DataLoader(initial_subset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_subset, batch_size=BATCH_SIZE, shuffle=False)
     
-    print(f"Training MnistNet model on {len(initial_subset)} total points...")
-    train_accs, val_accs, initial_steps = train_model(model, train_loader, val_loader, device, epochs=10)
+    print(f"Training {model.__class__.__name__} model on {len(initial_subset)} total points...")
+    train_accs, val_accs, initial_steps = train_model(model, train_loader, val_loader, device, epochs=num_epochs)
     initial_val_acc = val_accs[-1]
     print(f"Initial validation accuracy: {initial_val_acc:.2f}%")
     print(f"Initial training steps: {initial_steps}")
@@ -92,10 +99,15 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     all_selected_indices = np.concatenate([indices.numpy(), selected_indices])
     final_subset = Subset(train_subset, all_selected_indices)
     
-    print(f"Training MnistNet model on {len(final_subset)} total points...")
-    new_model = MnistNet()  # Fresh model
+    print(f"Training {model.__class__.__name__} model on {len(final_subset)} total points...")
+    if dataset == 'mnist':
+        new_model = MnistNet()
+    elif dataset == 'cifar10':
+        new_model = CifarNet()
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
     new_train_loader = DataLoader(final_subset, batch_size=train_loader.batch_size, shuffle=True)
-    _, val_accs, final_steps = train_model(new_model, new_train_loader, val_loader, device, epochs=10)
+    _, val_accs, final_steps = train_model(new_model, new_train_loader, val_loader, device, epochs=num_epochs)
     final_val_acc = val_accs[-1]
     print(f"Final validation accuracy: {final_val_acc:.2f}%")
     print(f"Final training steps: {final_steps}")
@@ -122,6 +134,7 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     results = {
         'seed': seed,
         'method': coreset_method,
+        'dataset': dataset,
         'initial_val_acc': initial_val_acc,
         'final_val_acc': final_val_acc,
         'test_acc': test_acc,
@@ -135,13 +148,15 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     
     return results
 
-def run_multiple_experiments(num_experiments: int = 3, methods: List[str] = None) -> pd.DataFrame:
+def run_multiple_experiments(num_experiments: int = 3, methods: List[str] = None, dataset: str = 'mnist', num_epochs: int = 10) -> pd.DataFrame:
     """
     Run multiple experiments with different seeds and methods
     
     Args:
         num_experiments: Number of experiments to run (will generate this many seeds)
         methods: List of coreset methods to test
+        dataset: 'mnist' or 'cifar10'
+        num_epochs: number of epochs
     
     Returns:
         DataFrame with all results
@@ -162,7 +177,7 @@ def run_multiple_experiments(num_experiments: int = 3, methods: List[str] = None
         for i, seed in enumerate(seeds):
             print(f"\nRun {i+1}/{len(seeds)} for {method}")
             try:
-                result = run_single_experiment(seed, method)
+                result = run_single_experiment(seed, method, k=1024, dataset=dataset, num_epochs=num_epochs)
                 all_results.append(result)
                 print(f"✓ Completed run {i+1} for {method}")
             except Exception as e:
@@ -242,22 +257,24 @@ def main():
                        help="Coreset methods to test (default: sensitivity uniform)")
     parser.add_argument("--k", type=int, default=1024, help="Coreset size (default: 1024)")
     parser.add_argument("--epochs", type=int, default=10, help="Number of epochs (default: 10)")
+    parser.add_argument("--dataset", type=str, default="mnist", choices=["mnist", "cifar10"], help="Dataset to use (mnist or cifar10)")
     args = parser.parse_args()
     
     print("Starting multiple active learning experiments...")
     print(f"Number of experiments: {args.num_experiments}")
     print(f"Methods to test: {args.methods}")
+    print(f"Dataset: {args.dataset}")
     print("Testing sensitivity vs uniform sampling with multiple seeds")
     
     # Run experiments
-    df = run_multiple_experiments(num_experiments=args.num_experiments, methods=args.methods)
+    df = run_multiple_experiments(num_experiments=args.num_experiments, methods=args.methods, dataset=args.dataset, num_epochs=args.epochs)
     
     # Metadata for output
     k_prime = int(args.k >> 2)
     dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"mnist_active_learning_{dt_str}.csv"
+    filename = f"{args.dataset}_active_learning_{dt_str}.csv"
     metadata = {
-        'dataset': 'mnist',
+        'dataset': args.dataset,
         'methods': ', '.join(args.methods),
         'num_epochs': args.epochs,
         'coreset_size': args.k,
