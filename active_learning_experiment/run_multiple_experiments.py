@@ -17,6 +17,7 @@ import sys
 import argparse
 from typing import Dict, List, Tuple
 import time
+from datetime import datetime
 
 # Import functions from main.py
 sys.path.append('.')
@@ -171,8 +172,8 @@ def run_multiple_experiments(num_experiments: int = 3, methods: List[str] = None
     df = pd.DataFrame(all_results)
     return df
 
-def print_results_table(df: pd.DataFrame):
-    """Print a pretty formatted results table"""
+def print_results_table(df: pd.DataFrame, metadata: dict):
+    """Print a pretty formatted results table with metadata"""
     print(f"\n{'='*100}")
     print("EXPERIMENT RESULTS SUMMARY")
     print(f"{'='*100}")
@@ -208,6 +209,11 @@ def print_results_table(df: pd.DataFrame):
     print(f"\n{'='*100}")
     print("OVERALL COMPARISON")
     print(f"{'='*100}")
+    # Print metadata here
+    print("Experiment Metadata:")
+    for k, v in metadata.items():
+        print(f"  {k}: {v}")
+    print(f"{'='*100}")
     print(f"{'Method':<15} {'Median Test Acc':<15} {'Std Test Acc':<15} {'Median Improvement':<15}")
     print(f"{'='*100}")
     
@@ -218,9 +224,12 @@ def print_results_table(df: pd.DataFrame):
         median_improvement = method_df['val_improvement'].median()
         print(f"{method:<15} {median_test:<15.2f} {std_test:<15.2f} {median_improvement:<15.2f}")
 
-def save_results_to_csv(df: pd.DataFrame, filename: str = "active_learning_results.csv"):
-    """Save results to CSV file"""
-    df.to_csv(filename, index=False)
+def save_results_to_csv(df: pd.DataFrame, filename: str, metadata: dict):
+    """Save results to CSV file with metadata as commented lines at the top"""
+    with open(filename, 'w') as f:
+        for k, v in metadata.items():
+            f.write(f"# {k}: {v}\n")
+        df.to_csv(f, index=False)
     print(f"\nResults saved to {filename}")
 
 def main():
@@ -230,6 +239,8 @@ def main():
                        help="Number of experiments to run (default: 3)")
     parser.add_argument("--methods", nargs="+", default=["sensitivity", "uniform"],
                        help="Coreset methods to test (default: sensitivity uniform)")
+    parser.add_argument("--k", type=int, default=1024, help="Coreset size (default: 1024)")
+    parser.add_argument("--epochs", type=int, default=10, help="Number of epochs (default: 10)")
     args = parser.parse_args()
     
     print("Starting multiple active learning experiments...")
@@ -240,11 +251,25 @@ def main():
     # Run experiments
     df = run_multiple_experiments(num_experiments=args.num_experiments, methods=args.methods)
     
-    # Print results table
-    print_results_table(df)
+    # Metadata for output
+    k_prime = int(args.k >> 2)
+    dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"mnist_active_learning_{dt_str}.csv"
+    metadata = {
+        'dataset': 'mnist',
+        'methods': ', '.join(args.methods),
+        'num_epochs': args.epochs,
+        'coreset_size': args.k,
+        'initial_sample_size': k_prime,
+        'num_experiments': args.num_experiments,
+        'timestamp': dt_str
+    }
     
-    # Save to CSV
-    save_results_to_csv(df)
+    # Print results table with metadata
+    print_results_table(df, metadata)
+    
+    # Save to CSV with metadata
+    save_results_to_csv(df, filename, metadata)
     
     print("\nAll experiments completed!")
 
