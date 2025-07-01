@@ -22,6 +22,7 @@ from datetime import datetime
 # Import functions from main.py
 sys.path.append('.')
 from main import MLP, CNN, get_device, load_dataset, train_model, compute_losses, coreset_sampling
+from models import MnistNet
 
 def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict:
     """
@@ -67,11 +68,11 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     # Step 2: Train initial model
     BATCH_SIZE = 32
     EVALUATION_BATCH_SIZE = 128
-    model = MLP(input_dim=28*28, num_classes=10)
+    model = MnistNet()
     train_loader = DataLoader(initial_subset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_subset, batch_size=BATCH_SIZE, shuffle=False)
     
-    print(f"Training MLP model on {len(initial_subset)} total points...")
+    print(f"Training MnistNet model on {len(initial_subset)} total points...")
     train_accs, val_accs, initial_steps = train_model(model, train_loader, val_loader, device, epochs=10)
     initial_val_acc = val_accs[-1]
     print(f"Initial validation accuracy: {initial_val_acc:.2f}%")
@@ -91,8 +92,8 @@ def run_single_experiment(seed: int, coreset_method: str, k: int = 1024) -> Dict
     all_selected_indices = np.concatenate([indices.numpy(), selected_indices])
     final_subset = Subset(train_subset, all_selected_indices)
     
-    print(f"Training MLP model on {len(final_subset)} total points...")
-    new_model = MLP(input_dim=28*28, num_classes=10)  # Fresh model
+    print(f"Training MnistNet model on {len(final_subset)} total points...")
+    new_model = MnistNet()  # Fresh model
     new_train_loader = DataLoader(final_subset, batch_size=train_loader.batch_size, shuffle=True)
     _, val_accs, final_steps = train_model(new_model, new_train_loader, val_loader, device, epochs=10)
     final_val_acc = val_accs[-1]
