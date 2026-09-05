@@ -1,0 +1,9 @@
+=== MAIN RUN DONE, starting auxiliaries ===
+### shuffle airline
+airline sig_raw_L2  intact  AUC=0.622 [0.525,0.721]
+   shuffled rep 0: AUC=0.548
+   shuffled rep 1: AUC=0.599
+   shuffled rep 2: AUC=0.584
+airline sig_raw_L2  shuffled AUC=0.577 +/- 0.021
+
+### shuffle retail
