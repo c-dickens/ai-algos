@@ -10,3 +10,6 @@ cache/
 # signature_trajectories: regenerable derived data
 signature_trajectories/out/*.jsonl
 signature_trajectories/out/*.npy
+# volatile while experiments run; final snapshots force-added on completion
+signature_trajectories/out/*.log
+signature_trajectories/out/results.json

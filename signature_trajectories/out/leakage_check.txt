@@ -1,0 +1,34 @@
+=== airline (pass 0.539) ===
+   symbol res:a:cancel_reservation:ok                    n= 201  pass(with)-pass(without) = -0.474
+   symbol call:a:cancel_reservation:a1                   n= 201  pass(with)-pass(without) = -0.474
+   symbol say:user:l1                                    n= 760  pass(with)-pass(without) = -0.354
+   symbol call:a:transfer_to_human_agents:a3             n= 193  pass(with)-pass(without) = +0.294
+   phrase 'transfer'             in  282/ 800 traces  pass(with)-pass(without) = +0.263
+   phrase '###TRANSFER###'       in  210/ 800 traces  pass(with)-pass(without) = +0.303
+   phrase 'unable'               in  138/ 800 traces  pass(with)-pass(without) = +0.190
+   phrase 'sorry'                in  164/ 800 traces  pass(with)-pass(without) = +0.120
+   phrase 'apolog'               in   69/ 800 traces  pass(with)-pass(without) = -0.019
+   phrase 'cannot'               in  269/ 800 traces  pass(with)-pass(without) = +0.068
+=== retail (pass 0.726) ===
+   symbol res:a:get_order_details:ok                     n=1790  pass(with)-pass(without) = +0.380
+   symbol call:a:get_order_details:a1                    n=1801  pass(with)-pass(without) = +0.339
+   symbol say:user:l3                                    n= 141  pass(with)-pass(without) = -0.287
+   symbol res:a:modify_pending_order_items:err           n=  67  pass(with)-pass(without) = -0.242
+   phrase 'transfer'             in  138/1824 traces  pass(with)-pass(without) = -0.135
+   phrase '###TRANSFER###'       in  126/1824 traces  pass(with)-pass(without) = -0.157
+   phrase 'unable'               in   97/1824 traces  pass(with)-pass(without) = -0.168
+   phrase 'sorry'                in  908/1824 traces  pass(with)-pass(without) = -0.002
+   phrase 'apolog'               in  115/1824 traces  pass(with)-pass(without) = -0.181
+   phrase 'cannot'               in  351/1824 traces  pass(with)-pass(without) = -0.116
+=== telecom (pass 0.424) ===
+   symbol call:a:transfer_to_human_agents:a3             n=1047  pass(with)-pass(without) = -0.569
+   symbol res:a:transfer_to_human_agents:ok              n=1129  pass(with)-pass(without) = -0.510
+   symbol say:user:l0                                    n=1422  pass(with)-pass(without) = -0.436
+   symbol res:u:can_send_mms:ok                          n= 755  pass(with)-pass(without) = -0.434
+   phrase 'transfer'             in 1425/1824 traces  pass(with)-pass(without) = -0.680
+   phrase '###TRANSFER###'       in 1243/1824 traces  pass(with)-pass(without) = -0.679
+   phrase 'resolved'             in  495/1824 traces  pass(with)-pass(without) = +0.048
+   phrase 'unable'               in  576/1824 traces  pass(with)-pass(without) = -0.376
+   phrase 'sorry'                in  212/1824 traces  pass(with)-pass(without) = -0.090
+   phrase 'apolog'               in  278/1824 traces  pass(with)-pass(without) = -0.097
+   phrase 'cannot'               in  961/1824 traces  pass(with)-pass(without) = -0.399
