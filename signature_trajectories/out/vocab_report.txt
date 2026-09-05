@@ -1,0 +1,15 @@
+airline   V=  50  occ=  23145  singletons= 5  count<=5= 7  tail(<=20) mass=0.00436  top50 mass=1.000  H=4.42 bits
+retail    V=  54  occ=  56215  singletons= 1  count<=5= 4  tail(<=20) mass=0.00114  top50 mass=1.000  H=4.46 bits
+telecom   V= 138  occ= 126361  singletons=12  count<=5=30  tail(<=20) mass=0.00153  top50 mass=0.915  H=5.33 bits
+pooled    V= 214  occ= 205721  singletons=18  count<=5=41  tail(<=20) mass=0.00157  top50 mass=0.852  H=5.68 bits
+
+steps per trajectory by domain:
+  airline  n= 800  len: med= 28  p5= 11 p95= 55 max=109
+  retail   n=1824  len: med= 30  p5= 18 p95= 46 max=124
+  telecom  n=1824  len: med= 65  p5= 24 p95=117 max=296
+
+length vs reward (point-biserial):
+  airline  r=-0.285   mean len | pass=25.6  fail=32.8
+  retail   r=-0.066   mean len | pass=30.5  fail=31.7
+  telecom  r=-0.373   mean len | pass=55.7  fail=79.3
+  pooled   r=-0.340   mean len | pass=37.4  fail=57.9

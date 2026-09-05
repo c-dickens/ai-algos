@@ -1,0 +1,25 @@
+[airline] n=800 tasks=50 pass=0.539 feats built in 7s
+   length                   p=     2  ARI task=0.043 model=0.031  AUC=0.636 [0.551,0.717]  (5s)
+   bag_of_symbols           p=   214  ARI task=0.257 model=0.021  AUC=0.607 [0.504,0.708]  (6s)
+   tfidf_kgram              p=   865  ARI task=0.200 model=0.265  AUC=0.672 [0.568,0.770]  (9s)
+   lsa_text                 p=   384  ARI task=0.089 model=0.020  AUC=0.560 [0.499,0.621]  (7s)
+   sig_raw_L2               p=   132  ARI task=0.079 model=0.240  AUC=0.622 [0.525,0.721]  (7s)
+   sig_cum_L2               p=   132  ARI task=0.097 model=0.004  AUC=0.685 [0.606,0.759]  (7s)
+   sig_raw_L3               p=  1463  ARI task=0.068 model=0.201  AUC=0.655 [0.571,0.743]  (14s)
+   sig_cum_L3               p=  1463  ARI task=0.058 model=0.000  AUC=0.666 [0.590,0.743]  (14s)
+   sig_raw_L2_no_t          p=   110  ARI task=0.051 model=0.237  AUC=0.632 [0.537,0.726]  (6s)
+   sig_raw_L3_no_t          p=  1110  ARI task=0.052 model=0.239  AUC=0.645 [0.560,0.733]  (13s)
+   sig_raw_L2_plus_len      p=   134  ARI task=0.087 model=0.207  AUC=0.640 [0.540,0.738]  (6s)
+   bag_plus_sig_raw_L2      p=   346  ARI task=0.118 model=0.212  AUC=0.624 [0.525,0.722]  (10s)
+[retail] n=1824 tasks=114 pass=0.726 feats built in 20s
+/tmp/claude-0/-home-user-ai-algos/6c844d0f-d274-5f2c-bed7-13eb4f6f5021/scratchpad/.venv/lib/python3.11/site-packages/sklearn/base.py:1403: ConvergenceWarning: Number of distinct clusters (55) found smaller than n_clusters (114). Possibly due to duplicate points in X.
+  return fit_method(estimator, *args, **kwargs)
+/tmp/claude-0/-home-user-ai-algos/6c844d0f-d274-5f2c-bed7-13eb4f6f5021/scratchpad/.venv/lib/python3.11/site-packages/sklearn/base.py:1403: ConvergenceWarning: Number of distinct clusters (55) found smaller than n_clusters (114). Possibly due to duplicate points in X.
+  return fit_method(estimator, *args, **kwargs)
+   length                   p=     2  ARI task=0.017 model=0.012  AUC=0.517 [0.456,0.580]  (5s)
+   bag_of_symbols           p=   214  ARI task=0.398 model=0.000  AUC=0.585 [0.522,0.647]  (10s)
+   tfidf_kgram              p=  1282  ARI task=0.294 model=0.343  AUC=0.654 [0.604,0.701]  (13s)
+   lsa_text                 p=   384  ARI task=0.274 model=0.011  AUC=0.647 [0.596,0.693]  (15s)
+   sig_raw_L2               p=   132  ARI task=0.076 model=0.269  AUC=0.611 [0.557,0.658]  (9s)
+   sig_cum_L2               p=   132  ARI task=0.096 model=0.006  AUC=0.590 [0.540,0.637]  (11s)
+   sig_raw_L3               p=  1463  ARI task=0.052 model=0.262  AUC=0.611 [0.564,0.659]  (348s)

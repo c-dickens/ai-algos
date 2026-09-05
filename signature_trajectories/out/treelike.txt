@@ -1,0 +1,11 @@
+trajectories: 4448   un-guarded path segments: 201273
+  zero-increment segments (consecutive identical embedding): 39 (0.019%)
+  immediate exact backtracks (d_i = -d_i+1, the tree-like motif): 490 (0.243%)
+
+||sig L=2|| with t   : med 3.983  p1 1.7402  min 1.3452
+||sig L=2|| without t: med 3.714  p1 1.1334  min 0.3764
+  trajectories with ||sig|| < 1e-06 : with t 0, without t 0
+  trajectories with ||sig|| < 0.001 : with t 0, without t 0
+  trajectories with ||sig|| < 0.01 : with t 0, without t 0
+
+correlation of the two norms: 0.9995

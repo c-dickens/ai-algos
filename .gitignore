@@ -6,3 +6,7 @@ cache/
 .ipynb_checkpoints/
 .env
 *.egg-info/
+
+# signature_trajectories: regenerable derived data
+signature_trajectories/out/*.jsonl
+signature_trajectories/out/*.npy
