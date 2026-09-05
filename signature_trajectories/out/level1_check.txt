@@ -1,0 +1,16 @@
+channel          level-1 term, RAW path   level-1 term, CUM path
+                    mean|.|          sd      mean|.|          sd
+  is_read            0.0072      0.0845       19.207      19.821
+  is_write           0.0002      0.0150        7.103       6.438
+  is_search          0.0027      0.0519        3.590       6.559
+  is_error           0.0000      0.0000        0.284       0.723
+  arg_size_bucket     0.1534      0.1943       14.479       7.700
+  retry_flag         0.0074      0.0858        2.932       8.309
+  target_novel       0.0000      0.0000        7.634       3.234
+  depth              0.0104      0.1228       12.772      19.934
+  t_index            1.0000      0.0000        1.000       0.000
+  cum_err_rate       0.0067      0.0168        0.007       0.017
+  log_out_size       0.0994      0.1069       16.762       9.407
+
+fraction of raw level-1 terms that are exactly 0: 0.761
+mean |level-1| over the 8 symbol-block channels: raw 0.0227  cumulative 8.500

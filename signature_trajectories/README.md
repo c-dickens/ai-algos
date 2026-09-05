@@ -19,7 +19,7 @@ plain `llm_agent` runs — 4 models x 3 domains x 4 trials over a shared task se
 | 4c order-destroying control | `shuffle_control.py` | `out/shuffle_*.json` |
 | 5 weight -> channel attribution | `interpret.py` | stdout |
 
-Findings and the verdict are in `FINDINGS.md`.
+Findings and the verdict are in [`FINDINGS.md`](FINDINGS.md).
 
 ## Reproducing
 

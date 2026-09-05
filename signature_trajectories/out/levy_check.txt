@@ -1,0 +1,14 @@
+channel          monotone?   corr(S^{t,j}/dj, weighted mean position)   n
+  cum_err_rate    yes         +1.000000                                     n=830
+  is_error        no          +nan                                       n=0
+  is_write        no          +nan                                       n=1
+  log_out_size    no          +1.000000                                    n=4446
+  retry_flag      no          +1.000000                                      n=33
+  depth           no          +1.000000                                      n=33
+
+The identity is exact for every channel (correlation 1.000): S^{t,j}/dj is the
+increment-weighted mean position at which channel j moves. For a channel that
+only increases that reads directly as 'how late does j accumulate'. For a
+channel whose increments change sign (log_out_size, is_write on the raw path)
+the same number is a signed weighted average that can sit outside [0,1] and no
+longer has a plain-language reading.

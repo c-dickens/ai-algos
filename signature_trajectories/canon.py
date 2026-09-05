@@ -92,7 +92,8 @@ def build_R(vocab):
             R[i, 3] = 1.0 if parts[3] == "err" else 0.0
             R[i, 4] = 0.0
         else:                                                     # say
-            R[i, 4] = int(parts[2][1:]) / (len(SAY_EDGES))
+            # the trailing length bucket is absent under the verbosity ablation
+            R[i, 4] = (int(parts[2][1:]) / len(SAY_EDGES)) if len(parts) > 2 else 0.0
     return R
 
 
