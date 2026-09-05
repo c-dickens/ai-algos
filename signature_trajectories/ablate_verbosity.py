@@ -5,6 +5,7 @@ Response length is about the most model-characteristic thing there is and has
 nothing to do with tool-use behaviour. Collapse those buckets and re-measure.
 """
 import json, os, sys, numpy as np, canon, features, experiment
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import adjusted_rand_score
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +27,16 @@ def main(scope="pooled"):
         canon.symbol = fn
         vocab, _ = canon.build_vocab(recs_all)
         R = canon.build_R(vocab)
-        reps, _ = features.build_all(recs, text, vocab, R)
+        reps = {
+            "bag_of_symbols": features.bag_of_symbols(recs, vocab),
+            "tfidf_kgram": TfidfVectorizer(ngram_range=(1, 3), min_df=5,
+                                           token_pattern=r"\S+", sublinear_tf=True
+                                           ).fit_transform(features.symbol_docs(recs)),
+            "sig_raw_L2": features.sig_matrix(recs, vocab, R, 2, with_t=True,
+                                              cumulative=False)[0],
+            "sig_cum_L2": features.sig_matrix(recs, vocab, R, 2, with_t=True,
+                                              cumulative=True)[0],
+        }
         print(f"--- {scope} / {tag} (V={len(vocab)}) ---", flush=True)
         for name in REPS:
             X = reps[name]

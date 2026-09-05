@@ -14,7 +14,7 @@ def main(scope="pooled", n_rep=3):
     y = np.array([r["reward"] for r in recs])
     task = np.array([r["task_id"] for r in recs])
     out = {}
-    for depth in (2, 3):
+    for depth in (2,):
         S, _ = features.sig_matrix(recs, vocab, R, depth, with_t=True, cumulative=False)
         a, lo, hi, _, _ = experiment.grouped_auc(S, y, task)
         out[f"sig_raw_L{depth}"] = (a, lo, hi)
